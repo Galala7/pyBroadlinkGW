@@ -1,3 +1,4 @@
+from __future__ import print_function
 import broadlink
 import menu
 import sys
@@ -5,6 +6,7 @@ import os
 import yaml
 import time
 import base64
+import binascii
 
 CONFIG_FILE = "config.yml"
 
@@ -18,27 +20,28 @@ else:
 
 myrm = None
 
-a = {"assadas": 12, "dasdas": {
-    "dasda": 3
-}}
-
 
 def init_connection():
-    print "Connecting to Broadlink RM2 Pro device..."
+    print("Connecting to Broadlink RM2 Pro device...")
     devices = broadlink.discover()
     if not devices:
         quit("error!  discover problem")
     if not devices.auth():
         quit("error! can't authenticate")
-    print "connected!"
+    # print "connected!"
     return devices
 
 
 def get_temp():
     temp = myrm.check_temperature()
-    if type(temp) is None:
-        return 100
-    print (temp + "\n")
+
+    # retry if needed
+    start_time = time.time()
+    while temp is None and time.time() < start_time + 5:
+        time.sleep(0.5)
+        temp = myrm.check_temperature()
+
+    # print (temp + "\n")
     return temp
 
 
@@ -49,8 +52,9 @@ def exit():
 
 
 def learn_ir():
-    print "Entering learning mode. Transmit IR signal now"
+    print("Entering learning mode.....", end='')
     myrm.enter_learning()
+    print("Transmit IR signal now!")
     start_time = time.time()
 
     ir_packet = None
@@ -62,37 +66,82 @@ def learn_ir():
 
 
 def record():
-    print "Enter device name"
-    dev_name = raw_input().upper()
-    print "Enter command name"
-    cmd_name = raw_input().upper()
-    ir_packet = base64.encodestring(learn_ir())
-    cfg["DEVICES"] = {
-        dev_name: {
-            cmd_name: ir_packet
+    devices = cfg["DEVICES"].keys()
+    dev_name = get_choice("Choose device number or 'n' add a new device", devices, append=True)
+    if dev_name in devices:
+        # update known device
+        commands = cfg["DEVICES"][dev_name].keys()
+        command = get_choice("Choose command update or 'n' for new command{0}".format(dev_name.title()), commands,
+                             append=True)
+    else:
+        print("Enter command name", end="")
+        command = raw_input().upper()
+
+    ir_packet = binascii.hexlify(learn_ir())
+    # ir_packet = base64.encodestring(learn_ir())
+
+    if dev_name in devices:
+        # if cfg["DEVICES"][dev_name].has_key(command):
+        #     cfg["DEVICES"][dev_name][command] = ir_packet
+        # else:
+        cfg["DEVICES"][dev_name][command] = ir_packet
+    else:
+        cfg["DEVICES"] = {
+            dev_name: {
+                command: ir_packet
+            }
         }
-    }
-    print "Saving command {0} for device {1}".format(cmd_name, dev_name)
+    print("Saving command {0} for device {1}".format(command, dev_name))
 
 
 def play():
-    print "Choose device:"
-
     devices = cfg["DEVICES"].keys()
+    dev_name = get_choice("Choose device number or 'q' to quit", devices)
 
-    for dev_name, i in enumerate(devices):
-        print "{0}. {1}".format(i, dev_name)
+    commands = cfg["DEVICES"][dev_name].keys()
+    command = get_choice("Choose command to send to {0}".format(dev_name.title()), commands)
 
-    dev_name = int(raw_input())
-    commands = cfg["DEVICES"][devices[dev_name]].keys()
-
-    print "choose command:"
-    for command, i in enumerate(commands):
-        print "{0}. {1}".format(i, command)
-    command = int(raw_input())
-
-    ir_packet = base64.decodestring(cfg["DEVICES"][devices[dev_name]][commands[command]])
+    ir_packet = binascii.unhexlify(cfg["DEVICES"][dev_name][command])
+    # ir_packet = base64.decodestring(cfg["DEVICES"][dev_name][command])
     myrm.send_data(ir_packet)
+
+
+def get_choice(text, choices, append=False, quit_func=exit):
+    """
+
+    :param text: str. String to print as title to the options menu
+    :param choices: list of str to choose from
+    :param append: bool. Should allow entering new value?
+    :param quit_func: quit_func. change to False to prevent user from quiting the program
+    :return: str
+    """
+
+    options = {}
+    # Add options
+    for i, choice in enumerate(choices):
+        options[str(i + 1)] = choice
+    # add append option
+    if append:
+        options["n"] = "Enter New Value"
+    # add quit option
+    if quit_func:
+        options["q"] = "Quit Program"
+
+    choice = ''
+    while choice not in options.keys():
+        print("\n" + text)
+        for i in sorted(options):
+            print("{0}. {1}".format(i, options[i]))
+        print("Choice number: ", end="")
+        choice = raw_input()
+        print(choice)
+    if append and choice.lower() == "n":
+        print("Enter new value: ", end='')
+        new_val = raw_input()
+        return new_val
+    if quit_func and choice.lower() == "q":
+        quit_func()
+    return options[choice.lower()]
 
 
 mainMenu = menu.Menu("Broadlink connector\n Choose option:")
