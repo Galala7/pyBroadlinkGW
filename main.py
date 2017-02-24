@@ -1,14 +1,15 @@
 from __future__ import print_function
-import broadlink
-import menu
-import sys
-import os
-import yaml
-import time
-import base64
+
 import binascii
+import os
+import sys
+
+import yaml
+import pyrm2
+# from pyrm2 import myrm, init_connection, send_command, get_temp, learn_ir
 
 CONFIG_FILE = "config.yml"
+rm = None
 
 if os.path.isfile(CONFIG_FILE):
     with open(CONFIG_FILE, 'r') as ymlfile:
@@ -16,82 +17,31 @@ if os.path.isfile(CONFIG_FILE):
         if not cfg:
             cfg = {}
 else:
-    cfg = {}
-
-myrm = None
-
-
-def init_connection():
-    print("Connecting to Broadlink RM2 Pro device...")
-    devices = broadlink.discover()
-    if not devices:
-        quit("error!  discover problem")
-    if not devices.auth():
-        quit("error! can't authenticate")
-    # print "connected!"
-    return devices
-
-
-def get_temp():
-    temp = myrm.check_temperature()
-
-    # retry if needed
-    start_time = time.time()
-    while temp is None and time.time() < start_time + 5:
-        time.sleep(0.5)
-        temp = myrm.check_temperature()
-
-    # print (temp + "\n")
-    return temp
-
-
-def exit():
-    with open(CONFIG_FILE, 'w') as ymlfile:
-        yaml.dump(cfg, ymlfile)
+    print("no config.yaml file found, exiting")
     sys.exit()
-
-
-def learn_ir():
-    print("Entering learning mode.....", end='')
-    myrm.enter_learning()
-    print("Transmit IR signal now!")
-    start_time = time.time()
-
-    ir_packet = None
-    while not ir_packet and time.time() < (start_time + 60 * 5):
-        ir_packet = myrm.check_data()
-        if not ir_packet:
-            time.sleep(1)
-    return ir_packet
 
 
 def record():
     devices = cfg["DEVICES"].keys()
-    dev_name = get_choice("Choose device number or 'n' add a new device", devices, append=True)
+    dev_name = get_choice("Choose device or 'n' add a new device", devices, append=True)
     if dev_name in devices:
         # update known device
         commands = cfg["DEVICES"][dev_name].keys()
-        command = get_choice("Choose command update or 'n' for new command{0}".format(dev_name.title()), commands,
-                             append=True)
     else:
-        print("Enter command name", end="")
-        command = raw_input().upper()
+        # print("Enter command name: ", end="")
+        # command = raw_input().upper()
+        commands = []
+    command = get_choice("Choose command to update or 'n' for new command", commands,
+                         append=True)
 
-    ir_packet = binascii.hexlify(learn_ir())
-    # ir_packet = base64.encodestring(learn_ir())
+    ir_packet = binascii.hexlify(rm.learn_ir())
 
     if dev_name in devices:
-        # if cfg["DEVICES"][dev_name].has_key(command):
-        #     cfg["DEVICES"][dev_name][command] = ir_packet
-        # else:
         cfg["DEVICES"][dev_name][command] = ir_packet
     else:
-        cfg["DEVICES"] = {
-            dev_name: {
-                command: ir_packet
-            }
-        }
-    print("Saving command {0} for device {1}".format(command, dev_name))
+        cfg["DEVICES"][dev_name] = {command: ir_packet}
+
+    print("Saving command {0} for device {1}\n".format(command, dev_name))
 
 
 def play():
@@ -102,11 +52,20 @@ def play():
     command = get_choice("Choose command to send to {0}".format(dev_name.title()), commands)
 
     ir_packet = binascii.unhexlify(cfg["DEVICES"][dev_name][command])
-    # ir_packet = base64.decodestring(cfg["DEVICES"][dev_name][command])
-    myrm.send_data(ir_packet)
+    rm.send_command(ir_packet)
 
 
-def get_choice(text, choices, append=False, quit_func=exit):
+def display_temp():
+    print("Current temperatura is {0} degrees.\n".format(rm.get_temp()))
+
+
+def my_exit():
+    with open(CONFIG_FILE, 'w') as ymlfile:
+        yaml.dump(cfg, ymlfile)
+    sys.exit()
+
+
+def get_choice(text, choices, append=False, quit_func=my_exit):
     """
 
     :param text: str. String to print as title to the options menu
@@ -144,18 +103,21 @@ def get_choice(text, choices, append=False, quit_func=exit):
     return options[choice.lower()]
 
 
-mainMenu = menu.Menu("Broadlink connector\n Choose option:")
-mainMenu.implicit()
 
-options = [("Get Temperature", get_temp),
-           ("Learn new command", record),
-           ("Play", play),
-           ("Quit", exit),
-           ]
 
-mainMenu.addOptions(options)
+
+def menu():
+    mainMenuOptions = {"Get Temperature": display_temp,
+                       "Learn new command": record,
+                       "Play": play
+                       }
+
+    while True:
+        choice = get_choice("Broadlink connector", mainMenuOptions.keys())
+        mainMenuOptions[choice]()
+
 
 if __name__ == '__main__':
-    myrm = init_connection()
-
-    mainMenu.open()
+    rm = pyrm2.myrm()
+    menu()
+    # mainMenu.open()
