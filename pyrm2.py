@@ -10,20 +10,24 @@ class myrm:
         self.myrm = None
         self.init_connection()
 
-    def init_connection(self):
-        devices = None
-        try:
-            print("Connecting to Broadlink RM2 Pro device...")
-            devices = broadlink.discover(timeout=1)
-            if not devices:
-                quit("error!  discover problem")
-            if not devices.auth():
-                quit("error! can't authenticate")
+    def init_connection(self, retry_count=10):
+        self.myrm = None
+        while (self.myrm is None) and (retry_count > 0):
+            try:
+                print("Connecting to Broadlink RM2 Pro device...")
+                devices = broadlink.discover(timeout=1)
+                if len(devices) == 0:
+                    raise Exception("Discover problem")
+                if not devices[0].auth():
+                    raise Exception("Can't authenticate")
                 # print "connected!"
-        except Exception as e:
-            print("init failed! {0}".format(e))
-            quit()
-        self.myrm = devices
+
+                self.myrm = devices[0]
+
+            except Exception as e:
+                print("Init failed! {0}".format(e))
+            retry_count -= 1
+
 
     def send_command(self, command):
         """
