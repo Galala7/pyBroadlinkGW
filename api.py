@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from flask import Flask, Response
 import json
 import time
@@ -7,7 +9,7 @@ import binascii
 import yaml
 import os
 
-CONFIG_FILE = "config.yml"
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yml")
 
 app = Flask(__name__)
 api = Api(app)
@@ -19,6 +21,9 @@ class Temperature(Resource):
 
 
 class IRDevice(Resource):
+    def get(self, device, ops):
+        return self.post(device, ops)
+
     def post(self, device, ops):
         response = {'status': 'failed'}
         try:

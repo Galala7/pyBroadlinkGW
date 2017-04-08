@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from __future__ import print_function
 
 import binascii
@@ -6,9 +8,11 @@ import sys
 
 import yaml
 import pyrm2
+
 # from pyrm2 import myrm, init_connection, send_command, get_temp, learn_ir
 
-CONFIG_FILE = "config.yml"
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yml")
+
 rm = None
 
 if os.path.isfile(CONFIG_FILE):
@@ -101,9 +105,6 @@ def get_choice(text, choices, append=False, quit_func=my_exit):
     if quit_func and choice.lower() == "q":
         quit_func()
     return options[choice.lower()]
-
-
-
 
 
 def menu():
