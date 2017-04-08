@@ -14,7 +14,7 @@ class myrm:
         devices = None
         try:
             print("Connecting to Broadlink RM2 Pro device...")
-            devices = broadlink.discover()
+            devices = broadlink.discover(timeout=1)
             if not devices:
                 quit("error!  discover problem")
             if not devices.auth():
